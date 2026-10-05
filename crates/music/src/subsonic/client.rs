@@ -17,7 +17,7 @@ use crate::subsonic::wire;
 use crate::{
     Album, AlbumCatalogue, AlbumDetail, Artist, ArtistProfile, Genre, GenreDetail, GenreItem,
     GenreSection, HomeFeed, MediaKind, MusicApi, Playlist, PlaylistDetail, Report, SUGGESTIONS,
-    SavedArtist, Track, UserProfile, distinct_covers, iso_8601_to_epoch,
+    SavedArtist, Track, UserProfile, distinct_covers, fold, iso_8601_to_epoch,
 };
 
 const PORTRAIT_LIMIT: usize = 24;
@@ -815,12 +815,11 @@ impl MusicApi for SubsonicClient {
     }
 
     async fn search_playlists(&self, query: &str) -> Result<Vec<Playlist>> {
-        let needle = query.to_lowercase();
         Ok(self
             .playlists()
             .await?
             .into_iter()
-            .filter(|playlist| playlist.name.to_lowercase().contains(&needle))
+            .filter(|playlist| fold::matches(&[&playlist.name], query))
             .collect())
     }
 

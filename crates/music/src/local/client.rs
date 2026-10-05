@@ -9,7 +9,7 @@ use storage::Database;
 use crate::{
     Album, AlbumCatalogue, AlbumDetail, Artist, ArtistProfile, GenreItem, GenreSection, HomeFeed,
     MediaKind, MusicApi, Playlist, PlaylistDetail, SUGGESTIONS, SavedArtist, Track, TrackTags,
-    UserProfile, distinct_covers,
+    UserProfile, distinct_covers, fold,
 };
 
 use super::index::Index;
@@ -440,17 +440,39 @@ impl MusicApi for LocalClient {
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Track>> {
-        let query = query.to_lowercase();
         let scanned = self.scanned.read().unwrap();
         Ok(scanned
             .tracks
             .iter()
-            .filter(|track| {
-                track.name.to_lowercase().contains(&query)
-                    || track.artists.to_lowercase().contains(&query)
-                    || track.album.to_lowercase().contains(&query)
-            })
+            .filter(|track| fold::matches(&[&track.name, &track.artists, &track.album], query))
             .cloned()
+            .collect())
+    }
+
+    async fn search_albums(&self, query: &str) -> Result<Vec<Album>> {
+        let scanned = self.scanned.read().unwrap();
+        Ok(scanned
+            .albums
+            .iter()
+            .filter(|album| fold::matches(&[&album.name, &album.artists], query))
+            .cloned()
+            .collect())
+    }
+
+    async fn search_playlists(&self, query: &str) -> Result<Vec<Playlist>> {
+        Ok(self
+            .store
+            .list()?
+            .into_iter()
+            .filter(|stored| fold::matches(&[&stored.name], query))
+            .map(|stored| {
+                let tracks = self
+                    .store
+                    .tracks(&stored.id)
+                    .map(|ids| self.listed(&ids))
+                    .unwrap_or_default();
+                playlist_from(stored.id, stored.name, stored.modified_at, &tracks)
+            })
             .collect())
     }
 

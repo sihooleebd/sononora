@@ -8,6 +8,7 @@ pub mod drm;
 pub mod engine;
 pub mod equalizer;
 pub mod escape;
+pub mod fold;
 pub mod kugou;
 #[cfg(test)]
 mod live_tests;
@@ -42,6 +43,7 @@ use time::parsing::Parsed;
 use time::{Month, OffsetDateTime};
 
 pub use equalizer::Equalizer;
+pub use fold::fold;
 pub use models::{
     Album, AlbumCatalogue, AlbumDetail, Artist, ArtistCatalogue, ArtistProfile, ArtistRef,
     Contributor, Credit, Genre, GenreDetail, GenreItem, GenreSection, HomeFeed, Lyrics, LyricsHit,
