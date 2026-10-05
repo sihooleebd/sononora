@@ -34,6 +34,12 @@ const CONTRAST: f32 = 0.34;
 const ARC_STEPS: usize = 12;
 /// How many straight edges stand in for each span of the wave when it is flattened for cutting.
 const WAVE_STEPS: usize = 8;
+/// The height of a peak's cap. A local detail that reads the same at every box height.
+const CAP: f32 = 3.;
+/// A cap's pillar, as a share of the bars' opacity.
+const PILLAR: f32 = 0.4;
+/// How much the dunes deepen the wave's fill, which carries the style with no line over it.
+const DUNES: f32 = 2.6;
 
 /// How the spectrum is drawn behind the fullscreen artwork.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -43,10 +49,19 @@ pub enum VisualizerStyle {
     Wave,
     #[default]
     Both,
+    Peaks,
+    Dunes,
 }
 
 impl VisualizerStyle {
-    pub const ALL: [Self; 4] = [Self::None, Self::Bars, Self::Wave, Self::Both];
+    pub const ALL: [Self; 6] = [
+        Self::None,
+        Self::Bars,
+        Self::Wave,
+        Self::Both,
+        Self::Peaks,
+        Self::Dunes,
+    ];
 
     pub fn shown(self) -> bool {
         self != Self::None
@@ -58,6 +73,8 @@ impl VisualizerStyle {
             Self::Bars => "bars",
             Self::Wave => "wave",
             Self::Both => "both",
+            Self::Peaks => "peaks",
+            Self::Dunes => "dunes",
         }
     }
 
@@ -66,6 +83,8 @@ impl VisualizerStyle {
             "none" => Self::None,
             "bars" => Self::Bars,
             "wave" => Self::Wave,
+            "peaks" => Self::Peaks,
+            "dunes" => Self::Dunes,
             _ => Self::default(),
         }
     }
@@ -77,6 +96,8 @@ impl VisualizerStyle {
             Self::Bars => t!("settings-visualizer-style-bars"),
             Self::Wave => t!("settings-visualizer-style-wave"),
             Self::Both => t!("settings-visualizer-style-both"),
+            Self::Peaks => t!("settings-visualizer-style-peaks"),
+            Self::Dunes => t!("settings-visualizer-style-dunes"),
         }
     }
 
@@ -86,6 +107,14 @@ impl VisualizerStyle {
 
     fn wave(self) -> bool {
         matches!(self, Self::Wave | Self::Both)
+    }
+
+    fn peaks(self) -> bool {
+        self == Self::Peaks
+    }
+
+    fn dunes(self) -> bool {
+        self == Self::Dunes
     }
 }
 
@@ -199,6 +228,12 @@ impl RenderOnce for Visualizer {
             .when(style.bars(), |this| {
                 this.child(bars(levels.clone(), max, bar_color, ride, corner))
             })
+            .when(style.peaks(), |this| {
+                this.child(peaks(levels.clone(), max, color, corner))
+            })
+            .when(style.dunes(), |this| {
+                this.child(dunes(levels.clone(), color, corner))
+            })
             .when(style.wave(), |this| {
                 this.child(glow(levels.clone(), color, corner))
                     .child(line(levels, color, corner))
@@ -298,26 +333,13 @@ fn wave(
     };
     let inset = px(width / 2.);
     let floor = bounds.origin.y + bounds.size.height;
-    let span = (bounds.size.height - inset * 2.).max(px(0.));
     let outline = corner.map(|radius| match blurred {
         true => outline(bounds, radius + px(GLOW * GLOW_REACH)),
         false => outline(bounds, radius),
     });
 
     for (bands, weight) in channels.into_iter().zip(CHANNELS) {
-        // A band owns a column, not a fence post: its point goes at the middle of the bar the
-        // same band draws.
-        let step = bounds.size.width / bands.len() as f32;
-        let crest = |band: f32| floor - inset - span * band.clamp(FLOOR, 1.);
-        let mut points = Vec::with_capacity(bands.len() + 2);
-        points.push(point(bounds.origin.x, crest(bands[0])));
-        points.extend(bands.iter().enumerate().map(|(index, band)| {
-            point(bounds.origin.x + step * (index as f32 + 0.5), crest(*band))
-        }));
-        points.push(point(
-            bounds.origin.x + bounds.size.width,
-            crest(bands[bands.len() - 1]),
-        ));
+        let points = crests(bounds, bands, inset);
 
         let weight = match blurred {
             true => weight * GLOW_OPACITY,
@@ -334,6 +356,121 @@ fn wave(
             window,
         );
     }
+}
+
+/// The spline's points across `bounds`: one per band at the middle of its column — a band owns
+/// a column, not a fence post — extended to both edges, kept `inset` clear of the box.
+fn crests(bounds: Bounds<Pixels>, bands: &[f32], inset: Pixels) -> Vec<Point<Pixels>> {
+    let floor = bounds.origin.y + bounds.size.height;
+    let span = (bounds.size.height - inset * 2.).max(px(0.));
+    let step = bounds.size.width / bands.len() as f32;
+    let crest = |band: f32| floor - inset - span * band.clamp(FLOOR, 1.);
+    let mut points = Vec::with_capacity(bands.len() + 2);
+    points.push(point(bounds.origin.x, crest(bands[0])));
+    points.extend(bands.iter().enumerate().map(|(index, band)| {
+        point(bounds.origin.x + step * (index as f32 + 0.5), crest(*band))
+    }));
+    points.push(point(
+        bounds.origin.x + bounds.size.width,
+        crest(bands[bands.len() - 1]),
+    ));
+    points
+}
+
+/// Paints a floating cap at each band's crest with a faint pillar under it, the look of a bank
+/// of peak meters.
+fn peaks(levels: Levels, max: Pixels, color: Hsla, corner: Option<Pixels>) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let levels = levels.mixed();
+            let count = levels.len() as f32;
+            let gap = px(GAP);
+            let width = (bounds.size.width - gap * (count - 1.)) / count;
+            if levels.is_empty() || width <= Pixels::ZERO {
+                return;
+            }
+            let outline = corner.map(|radius| outline(bounds, radius));
+            let floor = bounds.origin.y + bounds.size.height;
+            let cap_color = color.opacity(OPACITY * 2.);
+            let pillar_color = color.opacity(OPACITY * PILLAR);
+
+            for (index, level) in levels.into_iter().enumerate() {
+                let start = bounds.origin.x + (width + gap) * index as f32;
+                let left = snapped(start, window);
+                let right = snapped(start + width, window);
+                let top = snapped(floor - max * level.clamp(FLOOR, 1.), window);
+                let seat = snapped(top + px(CAP), window).min(floor);
+                let cornered = corner.is_some_and(|radius| {
+                    left < bounds.origin.x + radius
+                        || right > bounds.origin.x + bounds.size.width - radius
+                });
+                let cut_to = outline.as_deref().filter(|_| cornered);
+                block(left, right, top, seat, cap_color, cut_to, window);
+                if seat < floor {
+                    block(left, right, seat, floor, pillar_color, cut_to, window);
+                }
+            }
+        },
+    )
+    .absolute()
+    .inset_0()
+}
+
+/// One rectangle of a column, cut to `cut_to` when it reaches a rounded corner.
+fn block(
+    left: Pixels,
+    right: Pixels,
+    top: Pixels,
+    bottom: Pixels,
+    color: Hsla,
+    cut_to: Option<&[Point<Pixels>]>,
+    window: &mut Window,
+) {
+    match cut_to {
+        Some(outline) => {
+            let shape = vec![
+                point(left, top),
+                point(right, top),
+                point(right, bottom),
+                point(left, bottom),
+            ];
+            polygon(&cut(shape, outline), color, window);
+        }
+        None => window.paint_quad(gpui::fill(
+            Bounds::from_corners(point(left, top), point(right, bottom)),
+            color,
+        )),
+    }
+}
+
+/// Paints each channel's spectrum as a soft filled silhouette with no line over it, dunes
+/// rolling along the bottom of the window.
+fn dunes(levels: Levels, color: Hsla, corner: Option<Pixels>) -> impl IntoElement {
+    canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let channels = [&levels.left, &levels.right];
+            if channels.iter().any(|bands| bands.len() < 2) || bounds.size.width <= px(0.) {
+                return;
+            }
+            let outline = corner.map(|radius| outline(bounds, radius));
+            let floor = bounds.origin.y + bounds.size.height;
+            for (bands, weight) in channels.into_iter().zip(CHANNELS) {
+                let points = crests(bounds, bands, px(0.));
+                fill(
+                    &points,
+                    floor,
+                    color,
+                    weight * DUNES,
+                    outline.as_deref(),
+                    window,
+                );
+            }
+        },
+    )
+    .absolute()
+    .inset_0()
 }
 
 /// The spans of a Catmull-Rom spline through `points`, as the start, the two control points
