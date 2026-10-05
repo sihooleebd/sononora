@@ -41,10 +41,12 @@ pub(crate) fn copyright_notices(album: &Album) -> Vec<SharedString> {
 
 pub(crate) fn release_date_label(value: &str) -> SharedString {
     let parts: Vec<_> = value.split('-').collect();
-    if parts.len() != 3 {
-        return SharedString::from(value.to_owned());
-    }
-    let month = match parts[1] {
+    let (year, month, day) = match parts.as_slice() {
+        [year, month] => (*year, *month, None),
+        [year, month, day] => (*year, *month, Some(*day)),
+        _ => return SharedString::from(value.to_owned()),
+    };
+    let month = match month {
         "01" => t!("month-1"),
         "02" => t!("month-2"),
         "03" => t!("month-3"),
@@ -59,9 +61,14 @@ pub(crate) fn release_date_label(value: &str) -> SharedString {
         "12" => t!("month-12"),
         _ => return SharedString::from(value.to_owned()),
     };
-    let day = parts[2].trim_start_matches('0');
+    // A provider that only knows the month pads the day with zeros, which is not a date
+    // anyone should read.
+    let day = day.map(|day| day.trim_start_matches('0')).filter(|day| !day.is_empty());
 
-    t!("date-full", month = &month, day = day, year = parts[0])
+    match day {
+        Some(day) => t!("date-full", month = &month, day = day, year = year),
+        None => t!("date-month-year", month = &month, year = year),
+    }
 }
 
 #[derive(IntoElement, Default)]

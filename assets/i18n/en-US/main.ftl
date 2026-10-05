@@ -473,6 +473,7 @@ date-today = Today at { $time }
 date-yesterday = Yesterday at { $time }
 date-time = { $date }, { $time }
 date-full = { $month } { $day }, { $year }
+date-month-year = { $month } { $year }
 month-1 = Jan
 month-2 = Feb
 month-3 = Mar
