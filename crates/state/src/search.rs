@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use gpui::{Context, Entity, Task};
-use music::{Album, ArtistRef, Playlist, Track};
+use music::{Album, ArtistRef, Playlist, Track, fold};
 
 use crate::{Io, Library, Network, Session, SessionEvent, Shelf, join};
 
@@ -13,6 +13,7 @@ const EXACT: u32 = 100;
 const PREFIX: u32 = 80;
 const WORD: u32 = 60;
 const INSIDE: u32 = 40;
+const TYPO: u32 = 25;
 const TITLE: u32 = 3;
 const ARTIST: u32 = 2;
 const ALBUM: u32 = 1;
@@ -105,7 +106,7 @@ struct Query {
 
 impl Query {
     fn new(query: &str) -> Self {
-        let terms: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+        let terms: Vec<String> = fold(query).split_whitespace().map(str::to_owned).collect();
         Self {
             whole: terms.join(" "),
             terms,
@@ -655,7 +656,7 @@ fn kept(library: &[Track], track: &Track) -> bool {
 }
 
 fn score(value: &str, term: &str) -> u32 {
-    let value = value.trim().to_lowercase();
+    let value = fold(value);
     if value == term {
         return EXACT;
     }
@@ -665,10 +666,55 @@ fn score(value: &str, term: &str) -> u32 {
     if value.split_whitespace().any(|word| word.starts_with(term)) {
         return WORD;
     }
-    match value.contains(term) {
-        true => INSIDE,
+    if value.contains(term) {
+        return INSIDE;
+    }
+    match close(&value, term) {
+        true => TYPO,
         false => 0,
     }
+}
+
+/// Whether any word of `value` is a near miss for `term`: one letter off, or two on a longer
+/// term. Folded text only reaches here once every cheaper tier has failed, which is what lets
+/// "beyonse" still land on Beyoncé.
+fn close(value: &str, term: &str) -> bool {
+    let budget = match term.chars().count() {
+        0..=3 => return false,
+        4..=6 => 1,
+        _ => 2,
+    };
+    value
+        .split_whitespace()
+        .any(|word| within_edits(word, term, budget))
+}
+
+/// Whether the edit distance between `a` and `b` is at most `budget`.
+fn within_edits(a: &str, b: &str, budget: usize) -> bool {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    if a.len().abs_diff(b.len()) > budget {
+        return false;
+    }
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (from, at) in a.iter().zip(1..) {
+        let mut corner = row[0];
+        row[0] = at;
+        let mut best = at;
+        for (to, slot) in b.iter().zip(1..) {
+            let cost = match from == to {
+                true => corner,
+                false => corner.min(row[slot - 1]).min(row[slot]) + 1,
+            };
+            corner = row[slot];
+            row[slot] = cost;
+            best = best.min(cost);
+        }
+        if best > budget {
+            return false;
+        }
+    }
+    row[b.len()] <= budget
 }
 
 fn fit(fields: &[(u32, &str)], query: &Query) -> Option<u32> {
