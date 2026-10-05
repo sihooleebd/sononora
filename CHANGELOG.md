@@ -7,6 +7,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Two new visualizer styles: Peaks, a bank of floating peak meters, and Dunes, a soft filled
+  silhouette rolling along the bottom of the window.
+- Searching local files now finds albums and playlists, not just songs.
+- Search survives a typo: a term one letter off, or two on a longer word, still finds the
+  track, ranked under the exact matches.
+- Save the queue as a playlist with the new Save button at the top of the queue panel. It keeps
+  the current song and everything still to play.
+- Skip through a track with Shift+Left and Shift+Right, ten seconds a press.
+- Click the track length in the player bar to count down the time left instead; another click
+  brings the length back.
+- The search page remembers the last ten searches that led somewhere and offers them as chips
+  while the box is empty.
+
+### Changed
+
+- Search ignores accents and other letter decorations on both sides, so "sigur ros" finds
+  Sigur Rós and "beyonce" finds Beyoncé. This covers the search page, the add-to-playlist menu
+  and the pickers in settings.
+
+### Fixed
+
+- Karaoke lyrics with three-digit colon-separated milliseconds, like `[00:12:045]`, land on the
+  right moment instead of ten times later in the line.
+- An album that only knows its release month shows "Mar 2024" instead of the raw date or a
+  dangling comma where the day would be.
+
 ## [0.42.1] - 2026-10-02
 
 ### Added
