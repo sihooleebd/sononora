@@ -25,6 +25,8 @@ const VOLUME_WIDTH: f32 = 110.;
 const VOLUME_TIGHT: f32 = 72.;
 const CLOCK_SHORT: f32 = 3.4;
 const CLOCK_LONG: f32 = 5.4;
+/// The extra width the countdown's minus sign takes, in line heights.
+const CLOCK_SIGN: f32 = 0.6;
 
 pub(crate) struct PlayerBar {
     playback: Entity<Playback>,
@@ -400,6 +402,32 @@ impl Render for PlayerBar {
                 .when_else(align_end, |this| this.text_right(), |this| this.text_left())
         };
 
+        // The right-hand clock flips between the track's length and what is left of it.
+        let remaining = self.settings.read(cx).clock_remaining();
+        let counting = remaining && seekable;
+        let closing = div()
+            .id("clock-closing")
+            .flex_none()
+            .w(match counting {
+                true => clock_width + clock_text * CLOCK_SIGN,
+                false => clock_width,
+            })
+            .whitespace_nowrap()
+            .text_size(clock_text)
+            .font_features(tabular())
+            .text_color(muted)
+            .text_left()
+            .cursor_pointer()
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.settings.update(cx, |settings, cx| {
+                    settings.set_clock_remaining(!remaining, cx);
+                });
+            }))
+            .child(match counting {
+                true => SharedString::from(format!("-{}", clock(total.saturating_sub(elapsed)))),
+                false => clock(total),
+            });
+
         let seek = div()
             .flex()
             .items_center()
@@ -421,7 +449,7 @@ impl Render for PlayerBar {
                         ),
                 ),
             )
-            .child(clock_label(total, false))
+            .child(closing)
             .into_any_element();
 
         #[cfg(any(target_os = "linux", target_os = "freebsd"))]

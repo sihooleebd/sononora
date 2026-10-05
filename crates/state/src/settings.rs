@@ -504,6 +504,9 @@ struct StateValues {
     resume: Option<Resume>,
     window: Option<Frame>,
     system_theme: String,
+    /// Whether the player bar's right-hand clock counts down what is left instead of showing
+    /// the track's length.
+    clock_remaining: bool,
 }
 
 impl Default for StateValues {
@@ -532,6 +535,7 @@ impl Default for StateValues {
             resume: None,
             window: None,
             system_theme: ThemeKind::Dark.id().to_owned(),
+            clock_remaining: false,
         }
     }
 }
@@ -876,6 +880,10 @@ impl AppSettings {
 
     pub fn sidebar_right_tab(&self) -> SideTab {
         self.state.sidebar_right_tab
+    }
+
+    pub fn clock_remaining(&self) -> bool {
+        self.state.clock_remaining
     }
 
     /// The panel the fullscreen view last showed beside the cover, or `None` when it showed the
@@ -1416,6 +1424,14 @@ impl AppSettings {
 
     pub fn set_sidebar_right_open(&mut self, open: bool, cx: &mut Context<Self>) {
         self.state.sidebar_right_open = open;
+        self.schedule_state_save(cx);
+    }
+
+    pub fn set_clock_remaining(&mut self, remaining: bool, cx: &mut Context<Self>) {
+        if self.state.clock_remaining == remaining {
+            return;
+        }
+        self.state.clock_remaining = remaining;
         self.schedule_state_save(cx);
     }
 
