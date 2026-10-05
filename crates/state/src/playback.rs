@@ -1707,7 +1707,7 @@ impl Playback {
             return;
         };
 
-        let at = Duration::from_secs_f32(resume.position.max(0.));
+        let at = Duration::try_from_secs_f32(resume.position).unwrap_or_default();
         let origin = resume.origin.clone();
         let Some(track) = self.queue.update(cx, |queue, cx| queue.revive(resume, cx)) else {
             return;

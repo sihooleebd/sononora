@@ -96,7 +96,8 @@ fn hydrate(stub: Stub) -> Track {
         album: stub.album,
         album_id: stub.album_id,
         cover: stub.cover,
-        duration: Duration::from_secs_f32(stub.seconds.max(0.)),
+        // A stub comes off disk, so a mangled value must not take the launch down with it.
+        duration: Duration::try_from_secs_f32(stub.seconds).unwrap_or_default(),
         added_at: None,
         added_by: None,
         playcount: None,
