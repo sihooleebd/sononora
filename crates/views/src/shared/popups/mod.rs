@@ -161,5 +161,5 @@ impl SearchPopup {
 }
 
 pub(crate) fn matches_query(id: &str, label: &str, query: &str) -> bool {
-    query.is_empty() || label.to_lowercase().contains(query) || id.to_lowercase().contains(query)
+    query.is_empty() || music::fold::matches(&[label, id], query)
 }

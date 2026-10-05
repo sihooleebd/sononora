@@ -209,7 +209,7 @@ impl ItemMenu {
             let searching = !query.is_empty();
             let found: Vec<Playlist> = playlists
                 .into_iter()
-                .filter(|playlist| playlist.name.to_lowercase().contains(&query))
+                .filter(|playlist| music::fold::matches(&[&playlist.name], &query))
                 .collect();
             let unmatched = found.is_empty();
             Menu::new("playlist-submenu")
