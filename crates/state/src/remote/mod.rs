@@ -148,12 +148,8 @@ impl Remote {
                 Command::Next => playback.next(cx),
                 Command::Previous => playback.previous(cx),
                 Command::Seek(at) => playback.seek(at, cx),
-                Command::Forward(step) => {
-                    shift(playback, playback.position().saturating_add(step), cx)
-                }
-                Command::Back(step) => {
-                    shift(playback, playback.position().saturating_sub(step), cx)
-                }
+                Command::Forward(step) => playback.seek_by(step, true, cx),
+                Command::Back(step) => playback.seek_by(step, false, cx),
                 Command::Volume(level) => playback.set_volume(level as f32, cx),
                 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
                 Command::Repeat(repeat) => playback.set_repeat(repeat, cx),
@@ -308,11 +304,3 @@ fn extension(format: image::ImageFormat) -> &'static str {
     format.extensions_str().first().copied().unwrap_or("img")
 }
 
-/// Seeks to `target`, held inside the current track.
-fn shift(playback: &mut Playback, target: Duration, cx: &mut Context<Playback>) {
-    let end = playback
-        .track()
-        .map(|track| track.duration)
-        .unwrap_or(target);
-    playback.seek(target.min(end), cx);
-}

@@ -1,12 +1,18 @@
+use std::time::Duration;
+
 use gpui::{App, Menu, MenuItem, OsAction};
 use i18n::t;
 use input::{
-    CloseWindow, Hide, HideOthers, MinimizeWindow, OpenSettings, Quit, RefreshLibrary, ShowAll,
-    SignOut, SongNext, SongPrevious, TogglePlayback, ToggleRepeat, ToggleShuffle, ZoomWindow,
+    CloseWindow, Hide, HideOthers, MinimizeWindow, OpenSettings, Quit, RefreshLibrary, SeekBack,
+    SeekForward, ShowAll, SignOut, SongNext, SongPrevious, TogglePlayback, ToggleRepeat,
+    ToggleShuffle, ZoomWindow,
 };
 use router::Destination;
 use state::{Shelf, Sonora};
 use ui::{Copy, Cut, Paste, SelectAll};
+
+/// How far one press of the seek shortcuts moves through the track.
+const SEEK_STEP: Duration = Duration::from_secs(10);
 
 pub fn register(lingers: bool, cx: &mut App) {
     cx.bind_keys(input::bindings());
@@ -63,6 +69,16 @@ pub fn register(lingers: bool, cx: &mut App) {
     cx.on_action(|_: &SongNext, cx: &mut App| {
         let playback = Sonora::global(cx).playback.clone();
         playback.update(cx, |playback, cx| playback.next(cx));
+    });
+
+    cx.on_action(|_: &SeekBack, cx: &mut App| {
+        let playback = Sonora::global(cx).playback.clone();
+        playback.update(cx, |playback, cx| playback.seek_by(SEEK_STEP, false, cx));
+    });
+
+    cx.on_action(|_: &SeekForward, cx: &mut App| {
+        let playback = Sonora::global(cx).playback.clone();
+        playback.update(cx, |playback, cx| playback.seek_by(SEEK_STEP, true, cx));
     });
 
     cx.on_action(|_: &ToggleShuffle, cx: &mut App| {

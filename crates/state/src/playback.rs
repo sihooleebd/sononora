@@ -1900,6 +1900,25 @@ impl Playback {
         }
     }
 
+    /// Seeks a step from where the track is heard right now, held inside the track. What the
+    /// skip shortcuts and remote players' relative seeks do.
+    pub fn seek_by(&mut self, step: Duration, forward: bool, cx: &mut Context<Self>) {
+        let Some(end) = self.track.as_ref().map(|track| track.duration) else {
+            return;
+        };
+        let at = self.live_position();
+        let target = match forward {
+            true => at.saturating_add(step),
+            false => at.saturating_sub(step),
+        };
+        let capped = match end.is_zero() {
+            // A track without a known length cannot clamp; the engine stops where it ends.
+            true => target,
+            false => target.min(end),
+        };
+        self.seek(capped, cx);
+    }
+
     /// Seeks to a share of the track, as the progress bar asks.
     pub fn seek_fraction(&mut self, fraction: f32, cx: &mut Context<Self>) {
         let Some(total) = self
