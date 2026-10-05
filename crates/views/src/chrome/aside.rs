@@ -12,8 +12,8 @@ use i18n::t;
 use music::{Shape, Track, Voice};
 use router::{Destination, LibraryTab, Link as _};
 use state::{
-    AppSettings, Lyrics, LyricsState, Network, Playback, PlaybackState, Queue, RomanizationScripts,
-    Shelf, SideTab, Sonora, Whence,
+    Addition, AppSettings, Lyrics, LyricsState, Network, Playback, PlaybackState, Queue,
+    RomanizationScripts, Shelf, SideTab, Sonora, Whence,
 };
 use ui::{
     ActiveTheme as _, Button, Card, DraggedPin, Edge, Motion, Motioned as _, Pin, Pinnable as _,
@@ -24,6 +24,7 @@ use ui::{
 use crate::chrome::{Chrome, section_label};
 use crate::shared::effects;
 use crate::shared::menus::ItemMenu;
+use crate::shared::playlist_editor::{Edit, PlaylistEditor};
 use crate::shared::pins::Pinned as _;
 
 const QUEUE: &str = "queue";
@@ -885,6 +886,28 @@ impl Aside {
                                         })),
                                 )
                             },
+                        )
+                        .child(
+                            Button::new("save-queue")
+                                .ghost()
+                                .small()
+                                .label(t!("queue-save"))
+                                .tint(theme.muted_foreground)
+                                .disabled(saveable(self.queue.read(cx)).is_empty())
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    let ids = saveable(this.queue.read(cx));
+                                    let Some(first) = ids.first() else {
+                                        return;
+                                    };
+                                    PlaylistEditor::open(
+                                        Edit::Create {
+                                            shelf: Shelf::of(first),
+                                            addition: Addition::Tracks(ids),
+                                        },
+                                        window,
+                                        cx,
+                                    );
+                                })),
                         )
                         .child(
                             Button::new("reset-queue")
@@ -2711,6 +2734,23 @@ fn viewport_along(scroll: &ScrollHandle, row: usize, view: Bounds<Pixels>, downw
 
 fn line_has_passed(line: &music::LyricsLine, position: std::time::Duration) -> bool {
     line.sung_end().is_some_and(|end| position >= end)
+}
+
+/// The ids the queue would save as a playlist: the current track and everything still to play,
+/// kept to the provider of the track leading them, since one playlist cannot span providers.
+fn saveable(queue: &Queue) -> Vec<String> {
+    let mut ids = queue
+        .current()
+        .into_iter()
+        .chain(queue.upcoming())
+        .filter_map(|track| track.id.clone());
+    let Some(first) = ids.next() else {
+        return Vec::new();
+    };
+    let shelf = Shelf::of(&first);
+    std::iter::once(first)
+        .chain(ids.filter(|id| Shelf::of(id) == shelf))
+        .collect()
 }
 
 fn primary_karaoke_visible(

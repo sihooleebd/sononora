@@ -219,6 +219,7 @@ queue-now-playing = Now playing
 queue-from = From
 queue-next-in-queue = Next in queue
 queue-up-next = Up next
+queue-save = Save
 queue-reset = Reset
 queue-clear = Clear
 queue-empty = Your queue is empty
