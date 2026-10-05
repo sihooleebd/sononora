@@ -123,10 +123,10 @@ fn index(sidx: &[u8], end: usize, head: usize) -> Option<Segments> {
         }
         segments.push(Segment {
             at: offset,
-            start: Duration::from_secs_f64(ticks as f64 / timescale as f64),
+            start: Duration::try_from_secs_f64(ticks as f64 / timescale as f64).ok()?,
         });
         offset = offset.checked_add((reference & 0x7fff_ffff) as usize)?;
-        ticks += u64::from(duration);
+        ticks = ticks.checked_add(u64::from(duration))?;
     }
     Some(Segments { head, segments })
 }

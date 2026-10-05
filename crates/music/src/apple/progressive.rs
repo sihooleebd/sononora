@@ -305,8 +305,10 @@ impl Cenc {
     /// A fragment's decode time as a position, once the timescale is known.
     fn moment(&self, ticks: Option<u64>) -> Option<Duration> {
         let ticks = ticks?;
-        (self.timescale > 0)
-            .then(|| Duration::from_secs_f64(ticks as f64 / f64::from(self.timescale)))
+        if self.timescale == 0 {
+            return None;
+        }
+        Duration::try_from_secs_f64(ticks as f64 / f64::from(self.timescale)).ok()
     }
 
     /// Where to start reading to land on `at`. `None` when the fragment covering it has not

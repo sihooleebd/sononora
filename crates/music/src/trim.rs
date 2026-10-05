@@ -23,8 +23,10 @@ pub fn from_mp4(data: &[u8]) -> Option<Trim> {
     let (segment, at) = edit(elst)?;
 
     Some(Trim {
-        skip: Duration::from_secs_f64(at as f64 / media as f64),
-        take: (segment > 0).then(|| Duration::from_secs_f64(segment as f64 / movie as f64)),
+        skip: Duration::try_from_secs_f64(at as f64 / media as f64).ok()?,
+        take: (segment > 0)
+            .then(|| Duration::try_from_secs_f64(segment as f64 / movie as f64).ok())
+            .flatten(),
     })
 }
 

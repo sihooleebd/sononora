@@ -322,7 +322,8 @@ fn probe_symphonia_at(path: &Path, skip: u64) -> Option<FallbackProbe> {
             (track.codec_params.n_frames, track.codec_params.sample_rate)
             && rate > 0
         {
-            duration = std::time::Duration::from_secs_f64(n_frames as f64 / rate as f64);
+            duration = std::time::Duration::try_from_secs_f64(n_frames as f64 / rate as f64)
+                .unwrap_or_default();
             if !duration.is_zero() {
                 break;
             }
