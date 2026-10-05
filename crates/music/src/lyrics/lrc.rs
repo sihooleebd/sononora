@@ -69,7 +69,7 @@ pub fn parse(lrc: &str) -> Vec<LyricsLine> {
     let mut lines: Vec<LyricsLine> = Vec::new();
     for line in lrc.lines() {
         if let Some(ms) = offset_of(line) {
-            shift += ms;
+            shift = shift.saturating_add(ms);
             continue;
         }
         lines.extend(read(line));
@@ -685,12 +685,13 @@ pub fn stamp_of(stamp: &str) -> Option<Duration> {
                 let minutes: u64 = first.parse().ok()?;
                 let seconds: u64 = second.parse().ok()?;
                 let fraction: u64 = third.parse().ok()?;
-                let seconds = seconds as f64
-                    + if fraction >= 100 {
-                        fraction as f64 / 1_000.
-                    } else {
-                        fraction as f64 / 100.
-                    };
+                // The field's width names its unit: two digits are hundredths and three are
+                // milliseconds, so "05" is 50ms where "045" is 45ms.
+                let scale = match third.len() {
+                    0..=2 => 100.,
+                    _ => 1_000.,
+                };
+                let seconds = seconds as f64 + fraction as f64 / scale;
                 return Duration::try_from_secs_f64(minutes as f64 * 60. + seconds).ok();
             }
         }
