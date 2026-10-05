@@ -3,8 +3,9 @@ use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-    AnyElement, App, ClickEvent, Context, Entity, FocusHandle, Focusable, FontWeight, MouseButton,
-    MouseDownEvent, Pixels, Point, Render, ScrollHandle, SharedString, WeakEntity, Window, div,
+    AnyElement, App, ClickEvent, Context, Div, Entity, FocusHandle, Focusable, FontWeight,
+    MouseButton, MouseDownEvent, Pixels, Point, Render, ScrollHandle, SharedString, WeakEntity,
+    Window, div,
 };
 use i18n::t;
 use input::SEARCH_CONTEXT;
@@ -19,9 +20,9 @@ use state::{
 };
 use ui::ActiveTheme as _;
 use ui::{
-    Activate, Card, Deck, Deselect, Pinnable, Popup, Room, Scrollbar, Scroller, SelectLeft,
-    SelectNext, SelectPrevious, SelectRight, Separator, Text, Theme, VAST, clock, eyebrow,
-    scrolled, snapped, tabular, vacant,
+    Activate, Button, Card, Deck, Deselect, Pinnable, Popup, Room, Scrollbar, Scroller,
+    SelectLeft, SelectNext, SelectPrevious, SelectRight, Separator, Text, Theme, VAST, clock,
+    eyebrow, scrolled, snapped, tabular, vacant,
 };
 
 use crate::shared::cards;
@@ -241,6 +242,7 @@ impl SearchView {
         let Some(hit) = self.search.read(cx).hits().get(at).cloned() else {
             return;
         };
+        self.remember_query(cx);
         match hit {
             Hit::Song(track) => {
                 let current = track.id.is_some() && track.id == self.playback_status.0;
@@ -257,6 +259,16 @@ impl SearchView {
             Hit::Album(album) => navigate(Destination::Album(album.id.into()), cx),
             Hit::Playlist(list) => navigate(Destination::Playlist(list.id.into()), cx),
         }
+    }
+
+    /// Keeps the query that led to this activation, so it comes back as a recent search.
+    fn remember_query(&self, cx: &mut App) {
+        let query = self.search.read(cx).query().trim().to_owned();
+        if query.is_empty() {
+            return;
+        }
+        let settings = Sonora::global(cx).settings.clone();
+        settings.update(cx, |settings, cx| settings.push_recent_search(query, cx));
     }
 
     fn deselect_hit(&mut self, _: &Deselect, window: &mut Window, cx: &mut Context<Self>) {
@@ -648,6 +660,7 @@ impl SearchView {
         let pad = theme.metrics.inset;
         let width = cells::content_width(window, pad * 2., cx);
         let plates = shelves::grid("genre", found, width, window, cx);
+        let recents = self.recents(gutter, cx);
 
         div()
             .flex()
@@ -655,6 +668,7 @@ impl SearchView {
             .flex_1()
             .min_h_0()
             .gap_3()
+            .children(recents)
             .child(div().px(gutter).child(eyebrow(t!("search-browse"), cx)))
             .child(
                 Scroller::new("search-browse", &self.browsing)
@@ -663,6 +677,70 @@ impl SearchView {
                     .child(plates),
             )
             .into_any_element()
+    }
+
+    /// The queries that led somewhere, as a row of chips over the genre grid. Clicking one asks
+    /// it again.
+    fn recents(&self, gutter: Pixels, cx: &mut Context<Self>) -> Option<Div> {
+        let recents = Sonora::global(cx).settings.read(cx).recent_searches().to_vec();
+        if recents.is_empty() {
+            return None;
+        }
+
+        let chips: Vec<Button> = recents
+            .into_iter()
+            .enumerate()
+            .map(|(index, query)| {
+                let asked = query.clone();
+                Button::new(("recent-search", index))
+                    .secondary()
+                    .small()
+                    .label(query)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.input.update(cx, |input, cx| {
+                            input.set_text(asked.clone(), cx);
+                            input.focus(window, cx);
+                        });
+                    }))
+            })
+            .collect();
+
+        Some(
+            div()
+                .flex()
+                .flex_col()
+                .gap_3()
+                .child(
+                    div()
+                        .px(gutter)
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(eyebrow(t!("search-recent"), cx))
+                        .child(
+                            Button::new("recent-clear")
+                                .ghost()
+                                .small()
+                                .label(t!("search-recent-clear"))
+                                .tint(cx.theme().muted_foreground)
+                                .on_click(cx.listener(|_, _, _, cx| {
+                                    Sonora::global(cx).settings.clone().update(
+                                        cx,
+                                        |settings, cx| settings.clear_recent_searches(cx),
+                                    );
+                                    cx.notify();
+                                })),
+                        ),
+                )
+                .child(
+                    div()
+                        .px(gutter)
+                        .flex()
+                        .flex_wrap()
+                        .gap_2()
+                        .children(chips),
+                ),
+        )
     }
 
     fn everything(&self, gutter: Pixels, window: &Window, cx: &Context<Self>) -> AnyElement {
@@ -821,13 +899,16 @@ fn pressed(
     let me = me.clone();
 
     move |_, _, cx| {
-        me.update(cx, |this, cx| match &target {
-            Press::Song(track) => this
-                .playback
-                .update(cx, |playback, cx| playback.play_radio(track, cx)),
-            Press::Artist(id) => navigate(Destination::Artist(id.clone().into()), cx),
-            Press::Album(id) => navigate(Destination::Album(id.clone().into()), cx),
-            Press::Playlist(id) => navigate(Destination::Playlist(id.clone().into()), cx),
+        me.update(cx, |this, cx| {
+            this.remember_query(cx);
+            match &target {
+                Press::Song(track) => this
+                    .playback
+                    .update(cx, |playback, cx| playback.play_radio(track, cx)),
+                Press::Artist(id) => navigate(Destination::Artist(id.clone().into()), cx),
+                Press::Album(id) => navigate(Destination::Album(id.clone().into()), cx),
+                Press::Playlist(id) => navigate(Destination::Playlist(id.clone().into()), cx),
+            }
         })
         .ok();
     }

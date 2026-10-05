@@ -247,6 +247,8 @@ const SAVE_RETRIES: usize = 3;
 const RELOAD_DELAY: Duration = Duration::from_millis(150);
 const RELOAD_RETRY_DELAY: Duration = Duration::from_secs(1);
 const RELOAD_RETRIES: usize = 3;
+/// How many recent searches are kept for the search page's empty state.
+const RECENT_SEARCHES: usize = 10;
 const THEMES_DIRECTORY: &str = "themes";
 const THEME_FORMAT_VERSION: u32 = 1;
 const DEFAULT_VOLUME: f32 = 0.7;
@@ -504,6 +506,8 @@ struct StateValues {
     resume: Option<Resume>,
     window: Option<Frame>,
     system_theme: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    recent_searches: Vec<String>,
     /// Whether the player bar's right-hand clock counts down what is left instead of showing
     /// the track's length.
     clock_remaining: bool,
@@ -535,6 +539,7 @@ impl Default for StateValues {
             resume: None,
             window: None,
             system_theme: ThemeKind::Dark.id().to_owned(),
+            recent_searches: Vec::new(),
             clock_remaining: false,
         }
     }
@@ -884,6 +889,11 @@ impl AppSettings {
 
     pub fn clock_remaining(&self) -> bool {
         self.state.clock_remaining
+    }
+
+    /// The queries that led somewhere, newest first.
+    pub fn recent_searches(&self) -> &[String] {
+        &self.state.recent_searches
     }
 
     /// The panel the fullscreen view last showed beside the cover, or `None` when it showed the
@@ -1424,6 +1434,26 @@ impl AppSettings {
 
     pub fn set_sidebar_right_open(&mut self, open: bool, cx: &mut Context<Self>) {
         self.state.sidebar_right_open = open;
+        self.schedule_state_save(cx);
+    }
+
+    /// Puts `query` at the head of the recent searches, dropping an earlier spelling of it and
+    /// anything past the cap.
+    pub fn push_recent_search(&mut self, query: String, cx: &mut Context<Self>) {
+        let folded = music::fold(&query);
+        self.state
+            .recent_searches
+            .retain(|kept| music::fold(kept) != folded);
+        self.state.recent_searches.insert(0, query);
+        self.state.recent_searches.truncate(RECENT_SEARCHES);
+        self.save_state_quietly(cx);
+    }
+
+    pub fn clear_recent_searches(&mut self, cx: &mut Context<Self>) {
+        if self.state.recent_searches.is_empty() {
+            return;
+        }
+        self.state.recent_searches.clear();
         self.schedule_state_save(cx);
     }
 
